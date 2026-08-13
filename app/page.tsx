@@ -64,7 +64,7 @@ export default function Home() {
               Sign In
             </a>
             <a
-              href="#start"
+              href="/create"
               className="rounded-full bg-[#2d1d31] px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#422d47] sm:px-5 sm:text-sm"
             >
               Start Designing
@@ -91,7 +91,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href="#start"
+                href="/create"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f57558] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(245,117,88,0.28)] transition hover:-translate-y-0.5 hover:bg-[#e8694d]"
               >
                 Start Designing <span aria-hidden="true">→</span>
