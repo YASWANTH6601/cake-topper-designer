@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { DesignShape } from "@/types/design";
+import type { BackgroundObject, ImageObject, TextObject } from "@/types/editor";
 
 const CakeCanvasStage = dynamic(() => import("./CakeCanvasStage"), {
   ssr: false,
@@ -16,6 +17,15 @@ type CakeCanvasProps = {
   shape: DesignShape;
   widthInches: number;
   heightInches: number;
+  textObjects: TextObject[];
+  imageObjects: ImageObject[];
+  background: BackgroundObject | null;
+  backgroundEditMode: boolean;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onChange: (id: string, updates: Partial<TextObject>) => void;
+  onImageChange: (id: string, updates: Partial<ImageObject>) => void;
+  onBackgroundChange: (updates: Partial<BackgroundObject>) => void;
 };
 
 export default function CakeCanvas(props: CakeCanvasProps) {
