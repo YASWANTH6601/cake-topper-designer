@@ -6,6 +6,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "
 import CakeCanvas from "./CakeCanvas";
 import FontBrowser from "./FontBrowser";
 import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModal";
+import useEditorHistory from "@/hooks/useEditorHistory";
 import type { DesignShape } from "@/types/design";
 import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
 import type { EditorFontOption } from "@/lib/editor-fonts";
@@ -32,12 +33,17 @@ type EditorWorkspaceProps = {
 
 type TextPreset = { text: string; fontSize: number };
 
+type DesignState = {
+  textObjects: TextObject[];
+  imageObjects: ImageObject[];
+  background: BackgroundObject | null;
+};
+
 export default function EditorWorkspace({ shape, width, height, name, fontOptions }: EditorWorkspaceProps) {
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [textObjects, setTextObjects] = useState<TextObject[]>([]);
-  const [imageObjects, setImageObjects] = useState<ImageObject[]>([]);
+  const { state: designState, commit, undo, redo, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], background: null });
+  const { textObjects, imageObjects, background } = designState;
   const [uploadedAssets, setUploadedAssets] = useState<UploadedImageAsset[]>([]);
-  const [background, setBackground] = useState<BackgroundObject | null>(null);
   const [cropDraft, setCropDraft] = useState<BackgroundObject | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
@@ -51,20 +57,38 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects], [imageObjects, textObjects]);
   const recommendedFonts = useMemo(() => fontOptions.filter((font) => font.recommended), [fontOptions]);
 
+  const handleUndo = useCallback(() => {
+    setSelectedId(null);
+    undo();
+  }, [undo]);
+
+  const handleRedo = useCallback(() => {
+    setSelectedId(null);
+    redo();
+  }, [redo]);
+
   const updateText = useCallback((id: string, updates: Partial<TextObject>) => {
-    setTextObjects((items) => items.map((item) => item.id === id ? { ...item, ...updates } : item));
-  }, []);
+    commit((state) => ({ ...state, textObjects: state.textObjects.map((item) => item.id === id ? { ...item, ...updates } : item) }));
+  }, [commit]);
+
+  const updateTextInput = useCallback((id: string, text: string) => {
+    commit((state) => ({ ...state, textObjects: state.textObjects.map((item) => item.id === id ? { ...item, text } : item) }), { groupKey: `text:${id}` });
+  }, [commit]);
 
   const updateImage = useCallback((id: string, updates: Partial<ImageObject>) => {
-    setImageObjects((items) => items.map((item) => item.id === id ? { ...item, ...updates } : item));
-  }, []);
+    commit((state) => ({ ...state, imageObjects: state.imageObjects.map((item) => item.id === id ? { ...item, ...updates } : item) }));
+  }, [commit]);
 
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
-    setTextObjects((items) => items.filter((item) => item.id !== selectedId));
-    setImageObjects((items) => items.filter((item) => item.id !== selectedId));
+    if (selectedId === BACKGROUND_SELECTION_ID) return;
+    commit((state) => ({
+      ...state,
+      textObjects: state.textObjects.filter((item) => item.id !== selectedId),
+      imageObjects: state.imageObjects.filter((item) => item.id !== selectedId),
+    }));
     setSelectedId(null);
-  }, [selectedId]);
+  }, [commit, selectedId]);
 
   useEffect(() => {
     const objectUrls = objectUrlsRef.current;
@@ -73,16 +97,23 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Delete" && event.key !== "Backspace") return;
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !isTyping) {
+        event.preventDefault();
+        if (event.shiftKey) handleRedo();
+        else handleUndo();
+        return;
+      }
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (isTyping) return;
       if (!selectedId) return;
       event.preventDefault();
       deleteSelected();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [deleteSelected, selectedId]);
+  }, [deleteSelected, handleRedo, handleUndo, selectedId]);
 
   function addText(preset: TextPreset = { text: "Happy Birthday", fontSize: 180 }) {
     const designWidth = width * DESIGN_DPI;
@@ -109,7 +140,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
       rotation: 0,
       curveLevel: 0,
     };
-    setTextObjects((items) => [...items, item]);
+    commit((state) => ({ ...state, textObjects: [...state.textObjects, item] }));
     setSelectedId(item.id);
   }
 
@@ -165,7 +196,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
       height: Math.max(30, Math.round(asset.originalHeight * initialScale)),
       rotation: 0,
     };
-    setImageObjects((items) => [...items, item]);
+    commit((state) => ({ ...state, imageObjects: [...state.imageObjects, item] }));
     setSelectedId(item.id);
   }
 
@@ -206,21 +237,13 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   }
 
   function applyBackground(nextBackground: BackgroundObject) {
-    if (background && background.src !== nextBackground.src) {
-      URL.revokeObjectURL(background.src);
-      objectUrlsRef.current.delete(background.src);
-    }
-    setBackground(nextBackground);
+    commit((state) => ({ ...state, background: nextBackground }));
     setCropDraft(null);
     setSelectedId(BACKGROUND_SELECTION_ID);
   }
 
   function removeBackground() {
-    if (background) {
-      URL.revokeObjectURL(background.src);
-      objectUrlsRef.current.delete(background.src);
-    }
-    setBackground(null);
+    commit((state) => ({ ...state, background: null }));
     if (selectedId === BACKGROUND_SELECTION_ID) setSelectedId(null);
   }
 
@@ -236,7 +259,6 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {[["↶", "Undo"], ["↷", "Redo"]].map(([icon, label]) => <button key={label} type="button" disabled title={`${label} is not available yet`} className="hidden size-9 cursor-not-allowed place-items-center rounded-lg border border-[#e3dde2] text-[#b4aab5] sm:grid" aria-label={`${label} (coming soon)`}>{icon}</button>)}
             <button type="button" disabled className="cursor-not-allowed rounded-full border border-[#ded6dc] px-3 py-2 text-xs font-semibold text-[#aaa0ab] sm:px-4">Save</button>
             <button type="button" disabled className="cursor-not-allowed rounded-full bg-[#d8d0d9] px-3 py-2 text-xs font-semibold text-white sm:px-4">Export</button>
           </div>
@@ -283,9 +305,17 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
         </aside>
 
         <section className="order-1 flex min-w-0 flex-col lg:order-none" aria-label="Design canvas workspace">
-          <div className="flex items-center justify-between border-b border-[#ddd6dd] bg-[#faf8fa] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8c818e]"><span>Canvas</span><span>Safe area & center guides</span></div>
+          <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#ddd6dd] bg-[#faf8fa] px-3 py-1.5 sm:px-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8c818e]">Canvas</span>
+            <div className="flex items-center rounded-xl border border-[#ded7de] bg-white p-0.5 shadow-sm" aria-label="Design history">
+              <button type="button" onClick={handleUndo} disabled={!canUndo} title="Undo (Command/Ctrl + Z)" className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-[#685d6b] transition hover:bg-[#f5f1f5] disabled:cursor-not-allowed disabled:text-[#b4aab5]" aria-label="Undo"><span className="text-base leading-none" aria-hidden="true">↶</span><span>Undo</span></button>
+              <span className="h-5 w-px bg-[#e9e3e8]" aria-hidden="true" />
+              <button type="button" onClick={handleRedo} disabled={!canRedo} title="Redo (Command/Ctrl + Shift + Z)" className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-[#685d6b] transition hover:bg-[#f5f1f5] disabled:cursor-not-allowed disabled:text-[#b4aab5]" aria-label="Redo"><span className="text-base leading-none" aria-hidden="true">↷</span><span>Redo</span></button>
+            </div>
+            <span className="hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8c818e] sm:inline">Safe area & center guides</span>
+          </div>
           <div className="flex min-h-[430px] flex-1 items-center justify-center overflow-hidden bg-[#ece8ed] bg-[radial-gradient(#d3ccd4_0.7px,transparent_0.7px)] [background-size:18px_18px]">
-            <CakeCanvas shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onBackgroundChange={(updates) => setBackground((item) => item ? { ...item, ...updates } : null)} />
+            <CakeCanvas shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
           </div>
         </section>
 
@@ -293,7 +323,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
           {selectedText ? (
             <div>
               <h2 className="text-sm font-semibold">Text properties</h2>
-              <label className="mt-5 block text-xs font-semibold text-[#665b68]">Text<input type="text" value={selectedText.text} onChange={(event) => updateText(selectedText.id, { text: event.target.value })} className="mt-2 w-full rounded-lg border border-[#dcd4db] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#8c68bd]" /></label>
+              <label className="mt-5 block text-xs font-semibold text-[#665b68]">Text<input type="text" value={selectedText.text} onChange={(event) => updateTextInput(selectedText.id, event.target.value)} onBlur={endGroup} className="mt-2 w-full rounded-lg border border-[#dcd4db] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#8c68bd]" /></label>
               <label className="mt-4 block text-xs font-semibold text-[#665b68]">Font<select value={recommendedFonts.some((font) => font.family === selectedText.fontFamily) ? selectedText.fontFamily : "__current"} onChange={(event) => { if (event.target.value === "__more") setFontBrowserOpen(true); else if (event.target.value !== "__current") updateText(selectedText.id, { fontFamily: event.target.value }); }} className="mt-2 w-full rounded-lg border border-[#dcd4db] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#8c68bd]">{!recommendedFonts.some((font) => font.family === selectedText.fontFamily) && <option value="__current">{fontOptions.find((font) => font.family === selectedText.fontFamily)?.label ?? "Selected font"}</option>}{recommendedFonts.map((font) => <option key={font.label} value={font.family}>{font.label}</option>)}<option disabled>──────────</option><option value="__more">More Fonts…</option></select></label>
               <fieldset className="mt-4">
                 <legend className="text-xs font-semibold text-[#665b68]">Text Shape</legend>
