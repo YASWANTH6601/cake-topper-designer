@@ -6,6 +6,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "
 import CakeCanvas from "./CakeCanvas";
 import FontBrowser from "./FontBrowser";
 import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModal";
+import AIDesignerPanel, { type AIGeneratedDesign } from "./AIDesignerPanel";
 import useEditorHistory from "@/hooks/useEditorHistory";
 import type { DesignShape } from "@/types/design";
 import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
@@ -230,10 +231,28 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
 
   function cancelCrop() {
     if (cropDraft && cropDraft.src !== background?.src) {
-      URL.revokeObjectURL(cropDraft.src);
-      objectUrlsRef.current.delete(cropDraft.src);
+      if (objectUrlsRef.current.has(cropDraft.src)) {
+        URL.revokeObjectURL(cropDraft.src);
+        objectUrlsRef.current.delete(cropDraft.src);
+      }
     }
     setCropDraft(null);
+  }
+
+  function useAiDesignAsBackground(design: AIGeneratedDesign) {
+    if (background && !window.confirm("Replace the current background with this AI design? You can adjust the crop before applying.")) return;
+
+    const image = new Image();
+    image.onload = () => setCropDraft(createCoverBackground(
+      design.src,
+      "AI generated design",
+      image.naturalWidth,
+      image.naturalHeight,
+      width * DESIGN_DPI,
+      height * DESIGN_DPI,
+    ));
+    image.onerror = () => setUploadError("Could not prepare the AI design as a background. Try generating it again.");
+    image.src = design.src;
   }
 
   function applyBackground(nextBackground: BackgroundObject) {
@@ -265,17 +284,19 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
         </nav>
       </header>
 
-      <div className="grid flex-1 lg:grid-cols-[180px_minmax(0,1fr)_270px]">
+      <div className={`grid flex-1 ${activeTool === "AI Images" ? "lg:grid-cols-[280px_minmax(0,1fr)_270px]" : "lg:grid-cols-[180px_minmax(0,1fr)_270px]"}`}>
         <aside className="order-2 border-t border-[#ddd6dd] bg-white lg:order-none lg:border-r lg:border-t-0" aria-label="Design tools">
           <div className="grid grid-cols-5 lg:grid-cols-2 lg:gap-1 lg:p-3">
             {toolItems.map((tool) => {
               const isText = tool.label === "Text";
               const isUploads = tool.label === "Uploads";
-              const isAvailable = isText || isUploads;
+              const isAi = tool.label === "AI Images";
+              const isAvailable = isText || isUploads || isAi;
               const active = activeTool === tool.label;
-              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isText ? "Add and edit text" : isUploads ? "Upload images" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
+              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isText ? "Add and edit text" : isUploads ? "Upload images" : isAi ? "Create artwork with AI" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
             })}
           </div>
+          <AIDesignerPanel shape={shape} width={width} height={height} hidden={activeTool !== "AI Images"} onUseAsBackground={useAiDesignAsBackground} />
           {activeTool === "Uploads" && (
             <div className="border-t border-[#ebe5ea] p-4">
               <h2 className="text-sm font-semibold">Uploads</h2>
