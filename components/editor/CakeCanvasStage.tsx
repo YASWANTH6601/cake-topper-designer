@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Konva from "konva";
 import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import WarpedTextNode from "./WarpedTextNode";
@@ -32,7 +32,15 @@ type CakeCanvasStageProps = {
 
 type DisplaySize = { width: number; height: number };
 
-export default function CakeCanvasStage({
+export type CakeCanvasHandle = {
+  exportPng: () => Promise<Blob>;
+};
+
+function waitForFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(function CakeCanvasStage({
   shape,
   widthInches,
   heightInches,
@@ -45,9 +53,10 @@ export default function CakeCanvasStage({
   onChange,
   onImageChange,
   onBackgroundChange,
-}: CakeCanvasStageProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
+  const printableGroupRef = useRef<Konva.Group>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const objectRefs = useRef<Map<string, Konva.Node>>(new Map());
   const [displaySize, setDisplaySize] = useState<DisplaySize>({ width: 0, height: 0 });
@@ -57,6 +66,58 @@ export default function CakeCanvasStage({
   // always reported back in internal design pixels.
   const designWidth = Math.round(widthInches * DESIGN_DPI);
   const designHeight = Math.round(heightInches * DESIGN_DPI);
+
+  useImperativeHandle(ref, () => ({
+    async exportPng() {
+      const printableGroup = printableGroupRef.current;
+      if (!printableGroup) throw new Error("The design canvas is not ready.");
+
+      if (document.fonts) {
+        await Promise.all(textObjects.map((item) =>
+          document.fonts.load(`${item.fontSize}px ${item.fontFamily}`, item.text),
+        ));
+        await document.fonts.ready;
+      }
+
+      // Image nodes update after their browser images finish loading. Waiting
+      // for their node images prevents an export while artwork is still blank.
+      const expectedImageIds = [
+        ...(background ? [BACKGROUND_SELECTION_ID] : []),
+        ...imageObjects.map((item) => item.id),
+      ];
+      const deadline = performance.now() + 10_000;
+      while (expectedImageIds.some((id) => {
+        const node = objectRefs.current.get(id);
+        return !(node instanceof Konva.Image) || !node.image();
+      })) {
+        if (performance.now() >= deadline) throw new Error("Design images did not finish loading.");
+        await waitForFrame();
+      }
+
+      // Warped text regenerates its bitmap after its font promise resolves.
+      // Give React/Konva a frame to commit that final bitmap before rendering.
+      await waitForFrame();
+      layerRef.current?.draw();
+
+      // A detached deep clone keeps all current image/canvas content and the
+      // circle clip, while dropping the responsive scale of the live Layer.
+      const exportGroup = printableGroup.clone();
+      try {
+        const blob = await exportGroup.toBlob({
+          x: 0,
+          y: 0,
+          width: designWidth,
+          height: designHeight,
+          pixelRatio: 1,
+          mimeType: "image/png",
+        });
+        if (!(blob instanceof Blob)) throw new Error("Konva could not create the PNG.");
+        return blob;
+      } finally {
+        exportGroup.destroy();
+      }
+    },
+  }), [background, designHeight, designWidth, imageObjects, textObjects]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -119,6 +180,7 @@ export default function CakeCanvasStage({
               {/* Every printable object belongs in this group. Circle designs
                   clip the group while Transformer controls remain unobstructed. */}
               <Group
+                ref={printableGroupRef}
                 clipFunc={isCircle ? (context) => {
                   context.arc(designWidth / 2, designHeight / 2, Math.min(designWidth, designHeight) / 2, 0, Math.PI * 2);
                 } : undefined}
@@ -231,4 +293,6 @@ export default function CakeCanvasStage({
       )}
     </div>
   );
-}
+});
+
+export default CakeCanvasStage;

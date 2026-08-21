@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { forwardRef } from "react";
+import type { CakeCanvasHandle } from "./CakeCanvasStage";
 import type { DesignShape } from "@/types/design";
 import type { BackgroundObject, ImageObject, TextObject } from "@/types/editor";
 
@@ -28,6 +30,9 @@ type CakeCanvasProps = {
   onBackgroundChange: (updates: Partial<BackgroundObject>) => void;
 };
 
-export default function CakeCanvas(props: CakeCanvasProps) {
-  return <CakeCanvasStage {...props} />;
-}
+const CakeCanvas = forwardRef<CakeCanvasHandle, CakeCanvasProps>(function CakeCanvas(props, ref) {
+  return <CakeCanvasStage ref={ref} {...props} />;
+});
+
+export default CakeCanvas;
+export type { CakeCanvasHandle };

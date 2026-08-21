@@ -3,7 +3,7 @@
 import Link from "next/link";
 import NextImage from "next/image";
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CakeCanvas from "./CakeCanvas";
+import CakeCanvas, { type CakeCanvasHandle } from "./CakeCanvas";
 import FontBrowser from "./FontBrowser";
 import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModal";
 import AIDesignerPanel, { type AIGeneratedDesign } from "./AIDesignerPanel";
@@ -49,6 +49,9 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [fontBrowserOpen, setFontBrowserOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const canvasRef = useRef<CakeCanvasHandle>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
@@ -57,6 +60,15 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const backgroundSelected = selectedId === BACKGROUND_SELECTION_ID && background !== null;
   const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects], [imageObjects, textObjects]);
   const recommendedFonts = useMemo(() => fontOptions.filter((font) => font.recommended), [fontOptions]);
+
+  const exportFilename = useMemo(() => {
+    const sanitizedName = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return `${sanitizedName && sanitizedName !== "untitled-design" ? sanitizedName : "cake-topper"}.png`;
+  }, [name]);
 
   const handleUndo = useCallback(() => {
     setSelectedId(null);
@@ -266,6 +278,28 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     if (selectedId === BACKGROUND_SELECTION_ID) setSelectedId(null);
   }
 
+  async function exportDesign() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError("");
+    try {
+      const blob = await canvasRef.current?.exportPng();
+      if (!blob) throw new Error("The design canvas is not ready.");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = exportFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    } catch {
+      setExportError("Unable to export this design.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-[#f4f1f4] text-[#281c2d]">
       <header className="relative z-10 border-b border-[#ddd6dd] bg-white">
@@ -279,7 +313,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button type="button" disabled className="cursor-not-allowed rounded-full border border-[#ded6dc] px-3 py-2 text-xs font-semibold text-[#aaa0ab] sm:px-4">Save</button>
-            <button type="button" disabled className="cursor-not-allowed rounded-full bg-[#d8d0d9] px-3 py-2 text-xs font-semibold text-white sm:px-4">Export</button>
+            <button type="button" onClick={exportDesign} disabled={exporting} className="rounded-full bg-[#6d489f] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5f3d8e] disabled:cursor-wait disabled:opacity-65 sm:px-4">{exporting ? "Preparing…" : "Export"}</button>
           </div>
         </nav>
       </header>
@@ -336,8 +370,9 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
             <span className="hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8c818e] sm:inline">Safe area & center guides</span>
           </div>
           <div className="flex min-h-[430px] flex-1 items-center justify-center overflow-hidden bg-[#ece8ed] bg-[radial-gradient(#d3ccd4_0.7px,transparent_0.7px)] [background-size:18px_18px]">
-            <CakeCanvas shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
+            <CakeCanvas ref={canvasRef} shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
           </div>
+          {exportError && <p role="alert" className="border-t border-[#f0cfc8] bg-[#fff6f3] px-4 py-2 text-center text-xs font-semibold text-[#a84734]">{exportError}</p>}
         </section>
 
         <aside className="order-3 border-t border-[#ddd6dd] bg-white p-5 lg:border-l lg:border-t-0" aria-label="Design information and properties">
