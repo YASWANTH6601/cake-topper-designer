@@ -7,10 +7,12 @@ import CakeCanvas, { type CakeCanvasHandle } from "./CakeCanvas";
 import FontBrowser from "./FontBrowser";
 import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModal";
 import AIDesignerPanel, { type AIGeneratedDesign } from "./AIDesignerPanel";
+import ElementsPanel from "./ElementsPanel";
 import useEditorHistory from "@/hooks/useEditorHistory";
 import type { DesignShape } from "@/types/design";
-import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
+import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ElementObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
 import type { EditorFontOption } from "@/lib/editor-fonts";
+import type { ElementAsset } from "@/lib/editor-elements";
 
 const DESIGN_DPI = 300;
 const MIN_FONT_SIZE = 30;
@@ -37,13 +39,14 @@ type TextPreset = { text: string; fontSize: number };
 type DesignState = {
   textObjects: TextObject[];
   imageObjects: ImageObject[];
+  elementObjects: ElementObject[];
   background: BackgroundObject | null;
 };
 
 export default function EditorWorkspace({ shape, width, height, name, fontOptions }: EditorWorkspaceProps) {
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const { state: designState, commit, undo, redo, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], background: null });
-  const { textObjects, imageObjects, background } = designState;
+  const { state: designState, commit, undo, redo, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], elementObjects: [], background: null });
+  const { textObjects, imageObjects, elementObjects, background } = designState;
   const [uploadedAssets, setUploadedAssets] = useState<UploadedImageAsset[]>([]);
   const [cropDraft, setCropDraft] = useState<BackgroundObject | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -57,8 +60,9 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const objectUrlsRef = useRef<Set<string>>(new Set());
   const selectedText = useMemo(() => textObjects.find((item) => item.id === selectedId) ?? null, [selectedId, textObjects]);
   const selectedImage = useMemo(() => imageObjects.find((item) => item.id === selectedId) ?? null, [imageObjects, selectedId]);
+  const selectedElement = useMemo(() => elementObjects.find((item) => item.id === selectedId) ?? null, [elementObjects, selectedId]);
   const backgroundSelected = selectedId === BACKGROUND_SELECTION_ID && background !== null;
-  const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects], [imageObjects, textObjects]);
+  const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects, ...elementObjects], [elementObjects, imageObjects, textObjects]);
   const recommendedFonts = useMemo(() => fontOptions.filter((font) => font.recommended), [fontOptions]);
 
   const exportFilename = useMemo(() => {
@@ -92,6 +96,10 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     commit((state) => ({ ...state, imageObjects: state.imageObjects.map((item) => item.id === id ? { ...item, ...updates } : item) }));
   }, [commit]);
 
+  const updateElement = useCallback((id: string, updates: Partial<ElementObject>) => {
+    commit((state) => ({ ...state, elementObjects: state.elementObjects.map((item) => item.id === id ? { ...item, ...updates } : item) }));
+  }, [commit]);
+
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
     if (selectedId === BACKGROUND_SELECTION_ID) return;
@@ -99,6 +107,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
       ...state,
       textObjects: state.textObjects.filter((item) => item.id !== selectedId),
       imageObjects: state.imageObjects.filter((item) => item.id !== selectedId),
+      elementObjects: state.elementObjects.filter((item) => item.id !== selectedId),
     }));
     setSelectedId(null);
   }, [commit, selectedId]);
@@ -213,6 +222,19 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     setSelectedId(item.id);
   }
 
+  function addElement(asset: ElementAsset) {
+    const designWidth = width * DESIGN_DPI;
+    const designHeight = height * DESIGN_DPI;
+    const baseSize = Math.min(designWidth, designHeight) * 0.22;
+    const placementIndex = elementObjects.length % 5;
+    const offset = (placementIndex - 2) * Math.min(designWidth, designHeight) * 0.035;
+    const elementWidth = asset.aspectRatio >= 1 ? baseSize : baseSize * asset.aspectRatio;
+    const elementHeight = asset.aspectRatio >= 1 ? baseSize / asset.aspectRatio : baseSize;
+    const item: ElementObject = { id: crypto.randomUUID(), type: "element", elementId: asset.id, name: asset.name, src: asset.src, x: designWidth / 2 + offset, y: designHeight / 2 + offset, width: Math.round(elementWidth), height: Math.round(elementHeight), rotation: 0 };
+    commit((state) => ({ ...state, elementObjects: [...state.elementObjects, item] }));
+    setSelectedId(item.id);
+  }
+
   function handleBackgroundUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -318,19 +340,21 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
         </nav>
       </header>
 
-      <div className={`grid flex-1 ${activeTool === "AI Images" ? "lg:grid-cols-[280px_minmax(0,1fr)_270px]" : "lg:grid-cols-[180px_minmax(0,1fr)_270px]"}`}>
+      <div className={`grid flex-1 ${activeTool === "AI Images" || activeTool === "Elements" ? "lg:grid-cols-[280px_minmax(0,1fr)_270px]" : "lg:grid-cols-[180px_minmax(0,1fr)_270px]"}`}>
         <aside className="order-2 border-t border-[#ddd6dd] bg-white lg:order-none lg:border-r lg:border-t-0" aria-label="Design tools">
           <div className="grid grid-cols-5 lg:grid-cols-2 lg:gap-1 lg:p-3">
             {toolItems.map((tool) => {
               const isText = tool.label === "Text";
               const isUploads = tool.label === "Uploads";
               const isAi = tool.label === "AI Images";
-              const isAvailable = isText || isUploads || isAi;
+              const isElements = tool.label === "Elements";
+              const isAvailable = isText || isUploads || isAi || isElements;
               const active = activeTool === tool.label;
-              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isText ? "Add and edit text" : isUploads ? "Upload images" : isAi ? "Create artwork with AI" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
+              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isText ? "Add and edit text" : isUploads ? "Upload images" : isAi ? "Create artwork with AI" : isElements ? "Add stickers and decorations" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
             })}
           </div>
           <AIDesignerPanel shape={shape} width={width} height={height} hidden={activeTool !== "AI Images"} onUseAsBackground={useAiDesignAsBackground} />
+          {activeTool === "Elements" && <ElementsPanel onAdd={addElement} />}
           {activeTool === "Uploads" && (
             <div className="border-t border-[#ebe5ea] p-4">
               <h2 className="text-sm font-semibold">Uploads</h2>
@@ -370,7 +394,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
             <span className="hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8c818e] sm:inline">Safe area & center guides</span>
           </div>
           <div className="flex min-h-[430px] flex-1 items-center justify-center overflow-hidden bg-[#ece8ed] bg-[radial-gradient(#d3ccd4_0.7px,transparent_0.7px)] [background-size:18px_18px]">
-            <CakeCanvas ref={canvasRef} shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
+            <CakeCanvas ref={canvasRef} shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} elementObjects={elementObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onElementChange={updateElement} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
           </div>
           {exportError && <p role="alert" className="border-t border-[#f0cfc8] bg-[#fff6f3] px-4 py-2 text-center text-xs font-semibold text-[#a84734]">{exportError}</p>}
         </section>
@@ -412,6 +436,8 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
               </dl>
               <button type="button" onClick={deleteSelected} className="mt-5 w-full rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button>
             </div>
+          ) : selectedElement ? (
+            <div><h2 className="text-sm font-semibold">Element properties</h2><dl className="mt-5 space-y-4 text-xs"><div><dt className="text-[#8a7f8c]">Element</dt><dd className="mt-1 truncate font-semibold">{selectedElement.name}</dd></div><div className="flex justify-between gap-3"><dt className="text-[#8a7f8c]">Canvas size</dt><dd className="text-right font-semibold">{Math.round(selectedElement.width)} × {Math.round(selectedElement.height)} px</dd></div><div className="flex justify-between"><dt className="text-[#8a7f8c]">Rotation</dt><dd className="font-semibold">{Math.round(selectedElement.rotation)}°</dd></div></dl><button type="button" onClick={deleteSelected} className="mt-5 w-full rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button></div>
           ) : backgroundSelected && background ? (
             <div>
               <h2 className="text-sm font-semibold">Background</h2>
@@ -428,9 +454,9 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
           <div className="mt-7 border-t border-[#ebe5ea] pt-5">
             <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Layers</h2><span className="rounded-full bg-[#f3eef3] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#948997]">{allObjects.length + (background ? 1 : 0)}</span></div>
             {allObjects.length || background ? <div className="mt-3 space-y-1.5">
-              {[...[...textObjects].reverse(), ...[...imageObjects].reverse()].map((item) => <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-medium ${selectedId === item.id ? "border-[#bca5d8] bg-[#f3edfb] text-[#654590]" : "border-transparent bg-[#faf8fa] text-[#6d626f] hover:border-[#ded5dd]"}`}><span className="grid size-6 shrink-0 place-items-center rounded bg-white text-[10px] font-bold">{item.type === "text" ? "T" : "▧"}</span><span className="truncate">{item.type === "text" ? item.text || "Empty text" : item.name}</span></button>)}
+              {[...[...textObjects].reverse(), ...[...elementObjects].reverse(), ...[...imageObjects].reverse()].map((item) => <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-medium ${selectedId === item.id ? "border-[#bca5d8] bg-[#f3edfb] text-[#654590]" : "border-transparent bg-[#faf8fa] text-[#6d626f] hover:border-[#ded5dd]"}`}><span className="grid size-6 shrink-0 place-items-center rounded bg-white text-[10px] font-bold">{item.type === "text" ? "T" : item.type === "element" ? "◇" : "▧"}</span><span className="truncate">{item.type === "text" ? item.text || "Empty text" : item.name}</span></button>)}
               {background && <button type="button" onClick={() => setSelectedId(BACKGROUND_SELECTION_ID)} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-medium ${backgroundSelected ? "border-[#bca5d8] bg-[#f3edfb] text-[#654590]" : "border-transparent bg-[#f4f1f4] text-[#6d626f] hover:border-[#ded5dd]"}`}><span className="grid size-6 shrink-0 place-items-center rounded bg-white text-[10px]" aria-hidden="true">▣</span><span className="min-w-0 flex-1 truncate">Background</span><span className="text-[9px] text-[#948997]" aria-label="Background locked at bottom">🔒</span></button>}
-            </div> : <div className="mt-4 rounded-xl border border-dashed border-[#ddd4dc] bg-[#fbf9fb] px-3 py-5 text-center text-xs leading-5 text-[#9a8f9c]">Add text or upload an image to see it here.</div>}
+            </div> : <div className="mt-4 rounded-xl border border-dashed border-[#ddd4dc] bg-[#fbf9fb] px-3 py-5 text-center text-xs leading-5 text-[#9a8f9c]">Add text, an image, or an element to see it here.</div>}
           </div>
           <Link href="/create" className="mt-7 flex items-center justify-center rounded-full border border-[#ded6dc] px-4 py-2.5 text-xs font-semibold text-[#665a69] hover:border-[#b9adb6]">Change design settings</Link>
         </aside>

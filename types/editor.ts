@@ -23,6 +23,19 @@ export type ImageObject = {
   rotation: number;
 };
 
+export type ElementObject = {
+  id: string;
+  type: "element";
+  elementId: string;
+  name: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
 export type UploadedImageAsset = {
   id: string;
   src: string;
@@ -44,6 +57,6 @@ export type BackgroundObject = {
   zoom: number;
 };
 
-export type EditorObject = TextObject | ImageObject;
+export type EditorObject = TextObject | ImageObject | ElementObject;
 
 export const BACKGROUND_SELECTION_ID = "__background__";

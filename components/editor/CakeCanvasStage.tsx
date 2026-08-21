@@ -6,8 +6,9 @@ import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from "reac
 import WarpedTextNode from "./WarpedTextNode";
 import CanvasImageNode from "./CanvasImageNode";
 import CanvasBackgroundNode from "./CanvasBackgroundNode";
+import CanvasElementNode from "./CanvasElementNode";
 import type { DesignShape } from "@/types/design";
-import { BACKGROUND_SELECTION_ID, type BackgroundObject, type ImageObject, type TextObject } from "@/types/editor";
+import { BACKGROUND_SELECTION_ID, type BackgroundObject, type ElementObject, type ImageObject, type TextObject } from "@/types/editor";
 
 const DESIGN_DPI = 300;
 const SAFE_AREA_INSET = 0.05;
@@ -21,12 +22,14 @@ type CakeCanvasStageProps = {
   heightInches: number;
   textObjects: TextObject[];
   imageObjects: ImageObject[];
+  elementObjects: ElementObject[];
   background: BackgroundObject | null;
   backgroundEditMode: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onChange: (id: string, updates: Partial<TextObject>) => void;
   onImageChange: (id: string, updates: Partial<ImageObject>) => void;
+  onElementChange: (id: string, updates: Partial<ElementObject>) => void;
   onBackgroundChange: (updates: Partial<BackgroundObject>) => void;
 };
 
@@ -46,12 +49,14 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
   heightInches,
   textObjects,
   imageObjects,
+  elementObjects,
   background,
   backgroundEditMode,
   selectedId,
   onSelect,
   onChange,
   onImageChange,
+  onElementChange,
   onBackgroundChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -84,6 +89,7 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
       const expectedImageIds = [
         ...(background ? [BACKGROUND_SELECTION_ID] : []),
         ...imageObjects.map((item) => item.id),
+        ...elementObjects.map((item) => item.id),
       ];
       const deadline = performance.now() + 10_000;
       while (expectedImageIds.some((id) => {
@@ -117,7 +123,7 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
         exportGroup.destroy();
       }
     },
-  }), [background, designHeight, designWidth, imageObjects, textObjects]);
+  }), [background, designHeight, designWidth, elementObjects, imageObjects, textObjects]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -149,7 +155,7 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
     const selectedNode = selectedId ? objectRefs.current.get(selectedId) : undefined;
     transformer.nodes(selectedNode ? [selectedNode] : []);
     transformer.getLayer()?.batchDraw();
-  }, [background, imageObjects, selectedId, textObjects]);
+  }, [background, elementObjects, imageObjects, selectedId, textObjects]);
 
   useEffect(() => {
     if (!document.fonts) return;
@@ -209,6 +215,18 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
                     item={item}
                     onSelect={() => onSelect(item.id)}
                     onChange={(updates) => onImageChange(item.id, updates)}
+                  />
+                ))}
+                {elementObjects.map((item) => (
+                  <CanvasElementNode
+                    key={item.id}
+                    ref={(node) => {
+                      if (node) objectRefs.current.set(item.id, node);
+                      else objectRefs.current.delete(item.id);
+                    }}
+                    item={item}
+                    onSelect={() => onSelect(item.id)}
+                    onChange={(updates) => onElementChange(item.id, updates)}
                   />
                 ))}
                 {textObjects.map((item) => {
