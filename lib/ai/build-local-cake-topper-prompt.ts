@@ -8,15 +8,18 @@ function getCompositionGuidance({ shape, width, height, message }: CakeTopperPro
     : "the main subject, faces, and important details";
 
   if (shape === "circle") {
-    return `Use a square 1:1 source composition intended for a circular final crop. Keep ${importantContent} centered, comfortably inside the circular safe area, and away from trimming edges.`;
+    const messagePlacement = message
+      ? "Keep the complete customer message inside the circle with every letter safely away from the trimming edge. Make the typography follow and balance with the circular composition naturally, while remaining fully readable after the circular crop."
+      : "Use the entire circular composition naturally. Do not reserve blank text space, create an empty banner, or generate random words.";
+    return `Create the artwork specifically as a finished circular cake-topper composition for the current ${width}-inch round cake. Although the API requires a square 1:1 source image, the actual finished artwork must be designed entirely for the circular printable region. Treat the circle inscribed inside the square source as the final design boundary. Do not compose this as a square poster. The four outside corner regions are not part of the finished cake topper, so do not place meaningful or important visual content in those corners. Keep ${importantContent} comfortably inside the circular boundary. Use the full circle naturally, balancing the design from the center outward. Nothing important may be lost when the square source is clipped to a perfect circle. ${messagePlacement}`;
   }
 
   if (shape === "square") {
-    return `Use a balanced square composition and keep ${importantContent} comfortably inside safe margins.`;
+    return `Create this specifically for the current ${width} × ${height}-inch square edible cake topper. Use the full square composition naturally and keep ${importantContent} comfortably inside square-safe margins.`;
   }
 
   const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
-  return `Use a ${orientation} composition with an approximate ${width}:${height} aspect ratio. Keep ${importantContent} comfortably inside safe margins.`;
+  return `Create this specifically for the current ${width} × ${height}-inch ${orientation} rectangular edible cake topper. Use a ${orientation} composition with an approximate ${width}:${height} aspect ratio, preserve that physical width-to-height relationship, and keep ${importantContent} comfortably inside printable safe margins.`;
 }
 
 function getMessageGuidance(message: string) {
