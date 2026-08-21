@@ -30,6 +30,7 @@ const sizeOptions: Record<DesignShape, SizeOption[]> = {
     height: size,
   })),
   rectangle: [
+    { label: "10 × 8 inches", value: "10x8", width: 10, height: 8 },
     { label: "8 × 10 inches", value: "8x10", width: 8, height: 10 },
     { label: "10 × 14 inches", value: "10x14", width: 10, height: 14 },
   ],
@@ -38,7 +39,7 @@ const sizeOptions: Record<DesignShape, SizeOption[]> = {
 const defaultSize: Record<DesignShape, string> = {
   circle: "8",
   square: "8",
-  rectangle: "8x10",
+  rectangle: "10x8",
 };
 
 export default function CreateDesignPage() {
