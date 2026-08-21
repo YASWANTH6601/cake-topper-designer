@@ -1,9 +1,9 @@
 import OpenAI from "openai";
 import {
-  buildCakeTopperPrompt,
   type CakeTopperPromptRequest,
   validateCakeTopperPromptRequest,
 } from "@/lib/ai/build-cake-topper-prompt";
+import { buildLocalCakeTopperPrompt } from "@/lib/ai/build-local-cake-topper-prompt";
 
 export const runtime = "nodejs";
 
@@ -13,6 +13,7 @@ function getGenerationSize({ shape, width, height }: CakeTopperPromptRequest) {
 }
 
 export async function POST(request: Request) {
+  const requestStartedAt = performance.now();
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -40,21 +41,38 @@ export async function POST(request: Request) {
     );
   }
 
+  const suppliedPrompt = typeof (body as Record<string, unknown>).prompt === "string"
+    ? (body as Record<string, string>).prompt.trim()
+    : "";
+  if (suppliedPrompt.length > 8_000) {
+    return Response.json(
+      { success: false, error: "The reusable prompt is too long." },
+      { status: 400 },
+    );
+  }
+
   try {
     const client = new OpenAI({ apiKey });
-    const prompt = await buildCakeTopperPrompt(client, input);
+    const prompt = suppliedPrompt || buildLocalCakeTopperPrompt(input);
+    const imageStartedAt = performance.now();
     const result = await client.images.generate({
       model: "gpt-image-2",
       prompt,
       size: getGenerationSize(input),
-      quality: "medium",
+      quality: "low",
       output_format: "png",
       background: "opaque",
       n: 1,
     });
+    const imageTime = Math.round(performance.now() - imageStartedAt);
     const image = result.data?.[0]?.b64_json;
 
     if (!image) throw new Error("Image response did not contain image data");
+
+    if (process.env.NODE_ENV !== "production") {
+      const totalTime = Math.round(performance.now() - requestStartedAt);
+      console.info(`AI generation: prompt=${suppliedPrompt ? "reused" : "local"} image=${imageTime}ms total=${totalTime}ms`);
+    }
 
     return Response.json({
       success: true,
@@ -69,4 +87,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

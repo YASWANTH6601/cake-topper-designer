@@ -37,24 +37,28 @@ export function validateCakeTopperPromptRequest(body: unknown): CakeTopperPrompt
   return { idea, message, shape: shape as CakeTopperShape, width, height };
 }
 
-function getCompositionGuidance({ shape, width, height }: CakeTopperPromptRequest) {
+function getCompositionGuidance({ shape, width, height, message }: CakeTopperPromptRequest) {
+  const importantContent = message
+    ? "the main subject, faces, the exact birthday message, and important details"
+    : "the main subject, faces, and important details";
+
   if (shape === "circle") {
     const size = width === height ? `${width}-inch round` : `${width} × ${height}-inch round`;
-    return `Create artwork specifically composed for a ${size} edible cake topper. Use a square source composition intended for a final circular crop. Keep the main subject, faces, and important details centered and safely inside the circle, away from trimming edges.`;
+    return `Create artwork specifically composed for a ${size} edible cake topper. Use a square 1:1 source composition intended for a final circular crop, balance the artwork for a circular layout, and keep ${importantContent} centered and comfortably inside the circle, away from the outer trimming edge.`;
   }
 
   if (shape === "square") {
-    return `Create artwork for a ${width} × ${height}-inch square edible cake topper. Use a balanced square composition with important details safely inside the trimming area.`;
+    return `Create artwork for a ${width} × ${height}-inch square edible cake topper. Use a balanced square composition with ${importantContent} comfortably inside square-safe margins.`;
   }
 
   const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
-  return `Create artwork for a ${width} × ${height}-inch rectangular edible cake topper. Use a ${orientation} composition with an aspect ratio of approximately ${width}:${height}, preserving that width-to-height relationship and keeping important details away from trimming edges.`;
+  return `Create artwork for a ${width} × ${height}-inch rectangular edible cake topper. Use a ${orientation}-oriented composition with an approximate ${width}:${height} aspect relationship, preserving that width-to-height relationship and keeping ${importantContent} comfortably inside printable boundaries.`;
 }
 
 export async function buildCakeTopperPrompt(client: OpenAI, input: CakeTopperPromptRequest) {
   const messageGuidance = input.message
-    ? `The intended birthday message is "${input.message}". Do not render this message directly into the artwork. Leave a clean, visually appropriate area where the editable birthday message can later be placed by the cake-topper editor.`
-    : "Do not reserve a dedicated message area unless it naturally improves the composition.";
+    ? `Integrate the exact customer message ${JSON.stringify(input.message)} directly into the finished artwork. Preserve every word, name, number, and spelling without shortening, rewriting, or replacing it. Use clearly readable, polished, theme-appropriate decorative typography with strong contrast and visually useful outlines, shadows, or highlights. Choose placement naturally as part of the overall composition, keep all letters comfortably inside printable safe margins, and do not create a separate blank banner or large empty region for the message. Do not add any other written text.`
+    : "No customer message was provided. Use the full composition naturally without empty banners, blank ribbons, or reserved text areas. Do not render any words, captions, signatures, watermarks, or unnecessary logos.";
 
   const response = await client.responses.create({
     model: "gpt-5-nano",
@@ -79,4 +83,3 @@ export async function buildCakeTopperPrompt(client: OpenAI, input: CakeTopperPro
   if (!prompt) throw new Error("Empty prompt response");
   return prompt;
 }
-
