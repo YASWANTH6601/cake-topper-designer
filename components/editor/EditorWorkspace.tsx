@@ -55,6 +55,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const canvasRef = useRef<CakeCanvasHandle>(null);
+  const clipboardRef = useRef<{ object: EditorObject; pasteCount: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
@@ -63,6 +64,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const selectedElement = useMemo(() => elementObjects.find((item) => item.id === selectedId) ?? null, [elementObjects, selectedId]);
   const backgroundSelected = selectedId === BACKGROUND_SELECTION_ID && background !== null;
   const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects, ...elementObjects], [elementObjects, imageObjects, textObjects]);
+  const selectedObject = useMemo(() => allObjects.find((item) => item.id === selectedId) ?? null, [allObjects, selectedId]);
   const recommendedFonts = useMemo(() => fontOptions.filter((font) => font.recommended), [fontOptions]);
 
   const exportFilename = useMemo(() => {
@@ -100,6 +102,33 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     commit((state) => ({ ...state, elementObjects: state.elementObjects.map((item) => item.id === id ? { ...item, ...updates } : item) }));
   }, [commit]);
 
+  const addObjectCopy = useCallback((source: EditorObject, offsetMultiplier: number) => {
+    const offset = Math.min(width, height) * DESIGN_DPI * 0.025 * offsetMultiplier;
+    const copy: EditorObject = { ...source, id: crypto.randomUUID(), x: source.x + offset, y: source.y + offset };
+    commit((state) => {
+      if (copy.type === "text") return { ...state, textObjects: [...state.textObjects, copy] };
+      if (copy.type === "image") return { ...state, imageObjects: [...state.imageObjects, copy] };
+      return { ...state, elementObjects: [...state.elementObjects, copy] };
+    });
+    setSelectedId(copy.id);
+  }, [commit, height, width]);
+
+  const duplicateSelected = useCallback(() => {
+    if (selectedObject) addObjectCopy(selectedObject, 1);
+  }, [addObjectCopy, selectedObject]);
+
+  const copySelected = useCallback(() => {
+    if (!selectedObject) return;
+    clipboardRef.current = { object: { ...selectedObject }, pasteCount: 0 };
+  }, [selectedObject]);
+
+  const pasteCopied = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard) return;
+    clipboard.pasteCount += 1;
+    addObjectCopy(clipboard.object, clipboard.pasteCount);
+  }, [addObjectCopy]);
+
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
     if (selectedId === BACKGROUND_SELECTION_ID) return;
@@ -120,22 +149,40 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target;
-      const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable);
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !isTyping) {
+      const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
+      if (isTyping) return;
+
+      const modifierPressed = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (modifierPressed && key === "z") {
         event.preventDefault();
         if (event.shiftKey) handleRedo();
         else handleUndo();
         return;
       }
+      if (modifierPressed && key === "c" && selectedObject) {
+        event.preventDefault();
+        copySelected();
+        return;
+      }
+      if (modifierPressed && key === "v" && clipboardRef.current) {
+        event.preventDefault();
+        pasteCopied();
+        return;
+      }
+      if (modifierPressed && key === "d" && selectedObject) {
+        event.preventDefault();
+        duplicateSelected();
+        return;
+      }
       if (event.key !== "Delete" && event.key !== "Backspace") return;
-      if (isTyping) return;
-      if (!selectedId) return;
+      if (!selectedObject) return;
       event.preventDefault();
       deleteSelected();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [deleteSelected, handleRedo, handleUndo, selectedId]);
+  }, [copySelected, deleteSelected, duplicateSelected, handleRedo, handleUndo, pasteCopied, selectedObject]);
 
   function addText(preset: TextPreset = { text: "Happy Birthday", fontSize: 180 }) {
     const designWidth = width * DESIGN_DPI;
@@ -322,6 +369,13 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     }
   }
 
+  const selectedObjectActions = (
+    <div className="mt-5 grid grid-cols-2 gap-2">
+      <button type="button" onClick={duplicateSelected} className="rounded-full border border-[#d8c9df] bg-[#f8f4fa] px-3 py-2.5 text-xs font-semibold text-[#674691] hover:bg-[#f1eafa]">Duplicate</button>
+      <button type="button" onClick={deleteSelected} className="rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button>
+    </div>
+  );
+
   return (
     <main className="flex min-h-screen flex-col bg-[#f4f1f4] text-[#281c2d]">
       <header className="relative z-10 border-b border-[#ddd6dd] bg-white">
@@ -424,7 +478,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
                 <label className="text-xs font-semibold text-[#665b68]">Rotation<input type="number" value={Math.round(selectedText.rotation)} onChange={(event) => updateText(selectedText.id, { rotation: Number(event.target.value) || 0 })} className="mt-2 w-full rounded-lg border border-[#dcd4db] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#8c68bd]" /></label>
               </div>
               <label className="mt-4 flex items-center justify-between rounded-lg border border-[#e2dbe1] px-3 py-2.5 text-xs font-semibold text-[#665b68]">Color<input type="color" value={selectedText.fill} onChange={(event) => updateText(selectedText.id, { fill: event.target.value })} className="h-8 w-12 cursor-pointer rounded border-0 bg-transparent" /></label>
-              <button type="button" onClick={deleteSelected} className="mt-5 w-full rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button>
+              {selectedObjectActions}
             </div>
           ) : selectedImage ? (
             <div>
@@ -434,10 +488,10 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
                 <div className="flex justify-between gap-3"><dt className="text-[#8a7f8c]">Canvas size</dt><dd className="text-right font-semibold">{Math.round(selectedImage.width)} × {Math.round(selectedImage.height)} px</dd></div>
                 <div className="flex justify-between"><dt className="text-[#8a7f8c]">Rotation</dt><dd className="font-semibold">{Math.round(selectedImage.rotation)}°</dd></div>
               </dl>
-              <button type="button" onClick={deleteSelected} className="mt-5 w-full rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button>
+              {selectedObjectActions}
             </div>
           ) : selectedElement ? (
-            <div><h2 className="text-sm font-semibold">Element properties</h2><dl className="mt-5 space-y-4 text-xs"><div><dt className="text-[#8a7f8c]">Element</dt><dd className="mt-1 truncate font-semibold">{selectedElement.name}</dd></div><div className="flex justify-between gap-3"><dt className="text-[#8a7f8c]">Canvas size</dt><dd className="text-right font-semibold">{Math.round(selectedElement.width)} × {Math.round(selectedElement.height)} px</dd></div><div className="flex justify-between"><dt className="text-[#8a7f8c]">Rotation</dt><dd className="font-semibold">{Math.round(selectedElement.rotation)}°</dd></div></dl><button type="button" onClick={deleteSelected} className="mt-5 w-full rounded-full border border-[#f0cfc8] bg-[#fff6f3] px-3 py-2.5 text-xs font-semibold text-[#bf513b] hover:bg-[#fff0eb]">Delete</button></div>
+            <div><h2 className="text-sm font-semibold">Element properties</h2><dl className="mt-5 space-y-4 text-xs"><div><dt className="text-[#8a7f8c]">Element</dt><dd className="mt-1 truncate font-semibold">{selectedElement.name}</dd></div><div className="flex justify-between gap-3"><dt className="text-[#8a7f8c]">Canvas size</dt><dd className="text-right font-semibold">{Math.round(selectedElement.width)} × {Math.round(selectedElement.height)} px</dd></div><div className="flex justify-between"><dt className="text-[#8a7f8c]">Rotation</dt><dd className="font-semibold">{Math.round(selectedElement.rotation)}°</dd></div></dl>{selectedObjectActions}</div>
           ) : backgroundSelected && background ? (
             <div>
               <h2 className="text-sm font-semibold">Background</h2>
