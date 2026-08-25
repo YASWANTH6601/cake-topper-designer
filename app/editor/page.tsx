@@ -1,6 +1,7 @@
 import EditorWorkspace from "@/components/editor/EditorWorkspace";
 import { editorFontOptions } from "@/lib/editor-fonts";
 import type { DesignShape } from "@/types/design";
+import { randomUUID } from "node:crypto";
 
 type EditorSearchParams = {
   shape?: string | string[];
@@ -8,6 +9,7 @@ type EditorSearchParams = {
   height?: string | string[];
   name?: string | string[];
   tool?: string | string[];
+  design?: string | string[];
 };
 
 const validShapes: DesignShape[] = ["circle", "square", "rectangle"];
@@ -32,6 +34,8 @@ export default async function EditorPage({ searchParams }: { searchParams: Promi
   const name = firstValue(query.name)?.trim() || "Untitled Design";
   const requestedTool = firstValue(query.tool);
   const initialTool = requestedTool === "ai" ? "AI Images" as const : requestedTool === "templates" ? "Templates" as const : undefined;
+  const requestedDesignId = firstValue(query.design)?.trim();
+  const designId = requestedDesignId || randomUUID();
 
-  return <EditorWorkspace shape={shape} width={width} height={height} name={name} fontOptions={editorFontOptions} initialTool={initialTool} />;
+  return <EditorWorkspace shape={shape} width={width} height={height} name={name} fontOptions={editorFontOptions} initialTool={initialTool} designId={designId} loadExisting={Boolean(requestedDesignId)} />;
 }

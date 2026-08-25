@@ -71,14 +71,19 @@ export default function useEditorHistory<T>(initialState: T) {
     });
   }, [endGroup]);
 
+  const reset = useCallback((state: T) => {
+    activeGroupRef.current = null;
+    setHistory({ past: [], present: state, future: [] });
+  }, []);
+
   return {
     state: history.present,
     commit,
     undo,
     redo,
+    reset,
     endGroup,
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
   };
 }
-

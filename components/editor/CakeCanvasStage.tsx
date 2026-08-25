@@ -37,6 +37,7 @@ type DisplaySize = { width: number; height: number };
 
 export type CakeCanvasHandle = {
   exportPng: () => Promise<Blob>;
+  exportThumbnail: (maxEdge?: number) => Promise<Blob>;
 };
 
 function waitForFrame() {
@@ -72,8 +73,8 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
   const designWidth = Math.round(widthInches * DESIGN_DPI);
   const designHeight = Math.round(heightInches * DESIGN_DPI);
 
-  useImperativeHandle(ref, () => ({
-    async exportPng() {
+  useImperativeHandle(ref, () => {
+    async function renderPrintable(pixelRatio: number) {
       const printableGroup = printableGroupRef.current;
       if (!printableGroup) throw new Error("The design canvas is not ready.");
 
@@ -114,7 +115,7 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
           y: 0,
           width: designWidth,
           height: designHeight,
-          pixelRatio: 1,
+          pixelRatio,
           mimeType: "image/png",
         });
         if (!(blob instanceof Blob)) throw new Error("Konva could not create the PNG.");
@@ -122,8 +123,12 @@ const CakeCanvasStage = forwardRef<CakeCanvasHandle, CakeCanvasStageProps>(funct
       } finally {
         exportGroup.destroy();
       }
-    },
-  }), [background, designHeight, designWidth, elementObjects, imageObjects, textObjects]);
+    }
+    return {
+      exportPng: () => renderPrintable(1),
+      exportThumbnail: (maxEdge = 420) => renderPrintable(Math.min(1, maxEdge / Math.max(designWidth, designHeight))),
+    };
+  }, [background, designHeight, designWidth, elementObjects, imageObjects, textObjects]);
 
   useEffect(() => {
     const container = containerRef.current;

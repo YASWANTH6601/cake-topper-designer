@@ -51,7 +51,7 @@ export default function Home() {
             <a className="transition-colors hover:text-[#281c2d]" href="#ai-images">
               AI Images
             </a>
-            <a className="transition-colors hover:text-[#281c2d]" href="#my-designs">
+            <a className="transition-colors hover:text-[#281c2d]" href="/designs">
               My Designs
             </a>
           </div>

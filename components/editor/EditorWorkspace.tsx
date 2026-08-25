@@ -15,6 +15,7 @@ import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type
 import type { EditorFontOption } from "@/lib/editor-fonts";
 import type { ElementAsset } from "@/lib/editor-elements";
 import type { TemplateDefinition } from "@/lib/editor-templates";
+import { getDesign, persistSource, restoreSource, saveDesign, type SavedDesign } from "@/lib/storage/saved-designs";
 
 const DESIGN_DPI = 300;
 const MIN_FONT_SIZE = 30;
@@ -35,6 +36,8 @@ type EditorWorkspaceProps = {
   name: string;
   fontOptions: EditorFontOption[];
   initialTool?: "AI Images" | "Templates";
+  designId: string;
+  loadExisting: boolean;
 };
 
 type TextPreset = { text: string; fontSize: number };
@@ -46,9 +49,13 @@ type DesignState = {
   background: BackgroundObject | null;
 };
 
-export default function EditorWorkspace({ shape, width, height, name, fontOptions, initialTool }: EditorWorkspaceProps) {
+export default function EditorWorkspace({ shape: initialShape, width: initialWidth, height: initialHeight, name: initialName, fontOptions, initialTool, designId, loadExisting }: EditorWorkspaceProps) {
+  const [shape, setShape] = useState(initialShape);
+  const [width, setWidth] = useState(initialWidth);
+  const [height, setHeight] = useState(initialHeight);
+  const [name, setName] = useState(initialName);
   const [activeTool, setActiveTool] = useState<string | null>(initialTool ?? null);
-  const { state: designState, commit, undo, redo, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], elementObjects: [], background: null });
+  const { state: designState, commit, undo, redo, reset, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], elementObjects: [], background: null });
   const { textObjects, imageObjects, elementObjects, background } = designState;
   const [uploadedAssets, setUploadedAssets] = useState<UploadedImageAsset[]>([]);
   const [cropDraft, setCropDraft] = useState<BackgroundObject | null>(null);
@@ -57,6 +64,8 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const [fontBrowserOpen, setFontBrowserOpen] = useState(false);
   const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState("");
+  const [projectStatus, setProjectStatus] = useState<"loading" | "ready" | "missing">(loadExisting ? "loading" : "ready");
+  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed">("saving");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const canvasRef = useRef<CakeCanvasHandle>(null);
@@ -64,6 +73,11 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  const sourceBlobsRef = useRef<Map<string, Blob>>(new Map());
+  const createdAtRef = useRef(new Date().toISOString());
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const hasSavedRef = useRef(loadExisting);
+  const skipNextAutosaveRef = useRef(loadExisting);
   const selectedText = useMemo(() => textObjects.find((item) => item.id === selectedId) ?? null, [selectedId, textObjects]);
   const selectedImage = useMemo(() => imageObjects.find((item) => item.id === selectedId) ?? null, [imageObjects, selectedId]);
   const selectedElement = useMemo(() => elementObjects.find((item) => item.id === selectedId) ?? null, [elementObjects, selectedId]);
@@ -71,6 +85,72 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const allObjects = useMemo<EditorObject[]>(() => [...textObjects, ...imageObjects, ...elementObjects], [elementObjects, imageObjects, textObjects]);
   const selectedObject = useMemo(() => allObjects.find((item) => item.id === selectedId) ?? null, [allObjects, selectedId]);
   const recommendedFonts = useMemo(() => fontOptions.filter((font) => font.recommended), [fontOptions]);
+
+  useEffect(() => {
+    if (!loadExisting) return;
+    let cancelled = false;
+    void getDesign(designId).then((saved) => {
+      if (cancelled) return;
+      if (!saved) {
+        setProjectStatus("missing");
+        return;
+      }
+      const restored: DesignState = {
+        textObjects: saved.textObjects,
+        imageObjects: saved.imageObjects.map(({ source, ...item }) => ({ ...item, src: restoreSource(source, objectUrlsRef.current, sourceBlobsRef.current) })),
+        elementObjects: saved.elementObjects.map(({ source, ...item }) => ({ ...item, src: restoreSource(source, objectUrlsRef.current, sourceBlobsRef.current) })),
+        background: saved.background ? (() => { const { source, ...item } = saved.background; return { ...item, src: restoreSource(source, objectUrlsRef.current, sourceBlobsRef.current) }; })() : null,
+      };
+      createdAtRef.current = saved.createdAt;
+      setName(saved.name);
+      setShape(saved.shape);
+      setWidth(saved.width);
+      setHeight(saved.height);
+      reset(restored);
+      setSaveStatus("saved");
+      setProjectStatus("ready");
+    }).catch(() => {
+      if (!cancelled) setProjectStatus("missing");
+    });
+    return () => { cancelled = true; };
+  }, [designId, loadExisting, reset]);
+
+  const saveProject = useCallback(() => {
+    if (projectStatus !== "ready") return Promise.resolve();
+    setSaveStatus("saving");
+    const saveOperation = async () => {
+      try {
+        const [background, imageObjects, elementObjects, thumbnail] = await Promise.all([
+          designState.background ? persistSource(designState.background.src, sourceBlobsRef.current).then((source) => { const { src: _src, ...item } = designState.background!; void _src; return { ...item, source }; }) : Promise.resolve(null),
+          Promise.all(designState.imageObjects.map(async ({ src, ...item }) => ({ ...item, source: await persistSource(src, sourceBlobsRef.current) }))),
+          Promise.all(designState.elementObjects.map(async ({ src, ...item }) => ({ ...item, source: await persistSource(src, sourceBlobsRef.current) }))),
+          canvasRef.current?.exportThumbnail(420).catch(() => null) ?? Promise.resolve(null),
+        ]);
+        const now = new Date().toISOString();
+        const saved: SavedDesign = { id: designId, version: 1, name: name.trim() || "Untitled Design", createdAt: createdAtRef.current, updatedAt: now, shape, width, height, background, textObjects: designState.textObjects, imageObjects, elementObjects, thumbnail };
+        await saveDesign(saved);
+        if (!hasSavedRef.current) {
+          hasSavedRef.current = true;
+          window.history.replaceState(window.history.state, "", `/editor?design=${encodeURIComponent(designId)}`);
+        }
+        setSaveStatus("saved");
+      } catch {
+        setSaveStatus("failed");
+      }
+    };
+    saveChainRef.current = saveChainRef.current.then(saveOperation, saveOperation);
+    return saveChainRef.current;
+  }, [designId, designState, height, name, projectStatus, shape, width]);
+
+  useEffect(() => {
+    if (projectStatus !== "ready") return;
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+    const timeout = window.setTimeout(() => { void saveProject(); }, 1_000);
+    return () => window.clearTimeout(timeout);
+  }, [designState, height, name, projectStatus, saveProject, shape, width]);
 
   const exportFilename = useMemo(() => {
     const sanitizedName = name
@@ -231,6 +311,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
 
       const src = URL.createObjectURL(file);
       objectUrlsRef.current.add(src);
+      sourceBlobsRef.current.set(src, file);
       const image = new Image();
       image.onload = () => {
         const asset: UploadedImageAsset = {
@@ -298,6 +379,7 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     }
     const src = URL.createObjectURL(file);
     objectUrlsRef.current.add(src);
+    sourceBlobsRef.current.set(src, file);
     const image = new Image();
     image.onload = () => setCropDraft(createCoverBackground(
       src,
@@ -405,6 +487,14 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     </div>
   );
 
+  if (projectStatus === "loading") {
+    return <main className="grid min-h-screen place-items-center bg-[#f4f1f4] px-5 text-[#281c2d]"><div className="text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#f0e8f7] text-xl text-[#6d489f]">♡</span><p className="mt-4 text-sm font-semibold">Loading your design...</p></div></main>;
+  }
+
+  if (projectStatus === "missing") {
+    return <main className="grid min-h-screen place-items-center bg-[#fffdf9] px-5 text-[#281c2d]"><section className="w-full max-w-lg rounded-[2rem] border border-[#e4dce2] bg-white p-8 text-center shadow-xl"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff0eb] text-2xl">?</span><h1 className="mt-5 text-2xl font-semibold">This design could not be found.</h1><p className="mt-3 text-sm leading-6 text-[#766b78]">It may have been deleted or removed with this browser&apos;s site data.</p><div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/designs" className="rounded-full border border-[#d8ced6] px-5 py-3 text-sm font-semibold">My Designs</Link><Link href="/create" className="rounded-full bg-[#f57558] px-5 py-3 text-sm font-semibold text-white">Create New Design</Link></div></section></main>;
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-[#f4f1f4] text-[#281c2d]">
       <header className="relative z-10 border-b border-[#ddd6dd] bg-white">
@@ -412,12 +502,13 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             <Link href="/create" className="grid size-9 shrink-0 place-items-center rounded-full border border-[#ded6dc] text-[#665a69] transition hover:border-[#b9adb6]" aria-label="Back to design settings">←</Link>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold sm:text-base">{name}</p>
+              <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => { if (!name.trim()) setName("Untitled Design"); }} aria-label="Design name" className="w-full min-w-0 truncate rounded-md border border-transparent bg-transparent px-1 text-sm font-semibold outline-none transition hover:border-[#ded6dc] focus:border-[#a991bd] focus:bg-white sm:text-base" />
               <p className="text-[10px] font-medium text-[#918694] sm:text-xs">{width} × {height} inches · <span className="capitalize">{shape}</span></p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <button type="button" disabled className="cursor-not-allowed rounded-full border border-[#ded6dc] px-3 py-2 text-xs font-semibold text-[#aaa0ab] sm:px-4">Save</button>
+            <span className={`hidden text-[10px] font-semibold sm:inline ${saveStatus === "failed" ? "text-[#b94e38]" : "text-[#8d828f]"}`}>{saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved on this device" : "Save failed"}</span>
+            <button type="button" onClick={() => void saveProject()} disabled={saveStatus === "saving"} className="rounded-full border border-[#ded6dc] px-3 py-2 text-xs font-semibold text-[#655a68] transition hover:bg-[#f7f3f7] disabled:cursor-wait disabled:opacity-55 sm:px-4">Save</button>
             <button type="button" onClick={exportDesign} disabled={exporting} className="rounded-full bg-[#6d489f] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5f3d8e] disabled:cursor-wait disabled:opacity-65 sm:px-4">{exporting ? "Preparing…" : "Export"}</button>
           </div>
         </nav>
