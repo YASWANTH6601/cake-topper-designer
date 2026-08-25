@@ -8,11 +8,13 @@ import FontBrowser from "./FontBrowser";
 import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModal";
 import AIDesignerPanel, { type AIGeneratedDesign } from "./AIDesignerPanel";
 import ElementsPanel from "./ElementsPanel";
+import TemplatesPanel from "./TemplatesPanel";
 import useEditorHistory from "@/hooks/useEditorHistory";
 import type { DesignShape } from "@/types/design";
 import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ElementObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
 import type { EditorFontOption } from "@/lib/editor-fonts";
 import type { ElementAsset } from "@/lib/editor-elements";
+import type { TemplateDefinition } from "@/lib/editor-templates";
 
 const DESIGN_DPI = 300;
 const MIN_FONT_SIZE = 30;
@@ -32,6 +34,7 @@ type EditorWorkspaceProps = {
   height: number;
   name: string;
   fontOptions: EditorFontOption[];
+  initialTool?: "AI Images" | "Templates";
 };
 
 type TextPreset = { text: string; fontSize: number };
@@ -43,8 +46,8 @@ type DesignState = {
   background: BackgroundObject | null;
 };
 
-export default function EditorWorkspace({ shape, width, height, name, fontOptions }: EditorWorkspaceProps) {
-  const [activeTool, setActiveTool] = useState<string | null>(null);
+export default function EditorWorkspace({ shape, width, height, name, fontOptions, initialTool }: EditorWorkspaceProps) {
+  const [activeTool, setActiveTool] = useState<string | null>(initialTool ?? null);
   const { state: designState, commit, undo, redo, endGroup, canUndo, canRedo } = useEditorHistory<DesignState>({ textObjects: [], imageObjects: [], elementObjects: [], background: null });
   const { textObjects, imageObjects, elementObjects, background } = designState;
   const [uploadedAssets, setUploadedAssets] = useState<UploadedImageAsset[]>([]);
@@ -52,6 +55,8 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [fontBrowserOpen, setFontBrowserOpen] = useState(false);
+  const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const canvasRef = useRef<CakeCanvasHandle>(null);
@@ -336,6 +341,30 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
     image.src = design.src;
   }
 
+  const closeTemplates = useCallback(() => {
+    if (!loadingTemplateId) setActiveTool(null);
+  }, [loadingTemplateId]);
+
+  function useTemplateAsBackground(template: TemplateDefinition): Promise<boolean> {
+    if (background && !window.confirm("Replace the current background with this template? You can adjust the crop before applying.")) return Promise.resolve(false);
+    setTemplateError("");
+    setLoadingTemplateId(template.id);
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => {
+        setCropDraft(createCoverBackground(template.masterImage, template.name, image.naturalWidth, image.naturalHeight, width * DESIGN_DPI, height * DESIGN_DPI));
+        setLoadingTemplateId(null);
+        resolve(true);
+      };
+      image.onerror = () => {
+        setTemplateError("Unable to load this template. Please try another.");
+        setLoadingTemplateId(null);
+        resolve(false);
+      };
+      image.src = template.masterImage;
+    });
+  }
+
   function applyBackground(nextBackground: BackgroundObject) {
     commit((state) => ({ ...state, background: nextBackground }));
     setCropDraft(null);
@@ -398,13 +427,14 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
         <aside className="order-2 border-t border-[#ddd6dd] bg-white lg:order-none lg:border-r lg:border-t-0" aria-label="Design tools">
           <div className="grid grid-cols-5 lg:grid-cols-2 lg:gap-1 lg:p-3">
             {toolItems.map((tool) => {
+              const isTemplates = tool.label === "Templates";
               const isText = tool.label === "Text";
               const isUploads = tool.label === "Uploads";
               const isAi = tool.label === "AI Images";
               const isElements = tool.label === "Elements";
-              const isAvailable = isText || isUploads || isAi || isElements;
+              const isAvailable = isTemplates || isText || isUploads || isAi || isElements;
               const active = activeTool === tool.label;
-              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isText ? "Add and edit text" : isUploads ? "Upload images" : isAi ? "Create artwork with AI" : isElements ? "Add stickers and decorations" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
+              return <button key={tool.label} type="button" disabled={!isAvailable} onClick={() => isAvailable && setActiveTool(active ? null : tool.label)} title={isTemplates ? "Browse ready-made artwork" : isText ? "Add and edit text" : isUploads ? "Upload images" : isAi ? "Create artwork with AI" : isElements ? "Add stickers and decorations" : `${tool.label} is coming soon`} className={`flex flex-col items-center gap-1.5 px-1 py-3 text-[10px] font-semibold lg:rounded-xl ${active ? "bg-[#f2ebfb] text-[#6d489f]" : isAvailable ? "text-[#655a68] hover:bg-[#f7f3f7]" : "cursor-not-allowed text-[#aaa0ab]"}`}><span className="grid size-7 place-items-center text-base">{tool.icon}</span>{tool.label}</button>;
             })}
           </div>
           <AIDesignerPanel shape={shape} width={width} height={height} hidden={activeTool !== "AI Images"} onUseAsBackground={useAiDesignAsBackground} />
@@ -436,6 +466,8 @@ export default function EditorWorkspace({ shape, width, height, name, fontOption
           )}
           {activeTool === "Text" && <div className="border-t border-[#ebe5ea] p-4"><h2 className="text-sm font-semibold">Add text</h2><p className="mt-1 text-xs leading-5 text-[#8d828f]">Choose a starting style, then make it yours.</p><button type="button" onClick={() => addText()} className="mt-4 w-full rounded-full bg-[#f57558] px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#e8694d]">+ Add Text</button><div className="mt-4 border-t border-[#eee8ed] pt-4"><p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#998e9a]">Quick presets</p><div className="space-y-2"><button type="button" onClick={() => addText({ text: "Happy Birthday", fontSize: 220 })} className="w-full rounded-lg border border-[#e1d9e0] px-3 py-2.5 text-left text-sm font-semibold hover:border-[#beaebe]">Add Heading</button><button type="button" onClick={() => addText({ text: "Name", fontSize: 150 })} className="w-full rounded-lg border border-[#e1d9e0] px-3 py-2.5 text-left text-xs font-medium hover:border-[#beaebe]">Add Subheading</button><button type="button" onClick={() => addText({ text: "Your message", fontSize: 90 })} className="w-full rounded-lg border border-[#e1d9e0] px-3 py-2 text-left text-[10px] hover:border-[#beaebe]">Add Small Text</button></div></div></div>}
         </aside>
+
+        {activeTool === "Templates" && <TemplatesPanel loadingTemplateId={loadingTemplateId} error={templateError} onClose={closeTemplates} onSelect={useTemplateAsBackground} />}
 
         <section className="order-1 flex min-w-0 flex-col lg:order-none" aria-label="Design canvas workspace">
           <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#ddd6dd] bg-[#faf8fa] px-3 py-1.5 sm:px-4">

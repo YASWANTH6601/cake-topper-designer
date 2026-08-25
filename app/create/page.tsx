@@ -44,6 +44,7 @@ const defaultSize: Record<DesignShape, string> = {
 
 export default function CreateDesignPage() {
   const router = useRouter();
+  const [startMode, setStartMode] = useState<"blank" | "ai" | "templates">("blank");
   const [shape, setShape] = useState<DesignShape>("circle");
   const [selectedSize, setSelectedSize] = useState("8");
   const [customWidth, setCustomWidth] = useState("");
@@ -111,6 +112,7 @@ export default function CreateDesignPage() {
 
     const trimmedName = designName.trim();
     if (trimmedName) params.set("name", trimmedName);
+    if (startMode === "templates") params.set("tool", "templates");
 
     router.push(`/editor?${params.toString()}`);
   }
@@ -131,14 +133,23 @@ export default function CreateDesignPage() {
 
       <section className="relative px-5 py-12 sm:px-8 sm:py-16">
         <div className="pointer-events-none absolute left-1/2 top-0 size-80 -translate-x-1/2 rounded-full bg-[#efe7ff]/60 blur-3xl" />
-        <div className="relative mx-auto max-w-3xl">
+        <div className="relative mx-auto max-w-6xl">
           <div className="text-center">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#e16b50]">New canvas</span>
             <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">Create a New Design</h1>
             <p className="mt-4 text-base leading-7 text-[#766b78] sm:text-lg">Choose the shape and physical print size for your cake topper.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-10 rounded-[2rem] border border-[#e4dce2] bg-white p-5 shadow-[0_28px_70px_rgba(53,34,57,0.1)] sm:p-8">
+          <div className="mx-auto mt-8 grid max-w-3xl grid-cols-3 gap-2 rounded-2xl border border-[#e3dce2] bg-white p-1.5 shadow-sm" aria-label="Choose how to start">
+            {([
+              { id: "blank", label: "Start Blank", icon: "＋" },
+              { id: "ai", label: "Create with AI", icon: "✦" },
+              { id: "templates", label: "Templates", icon: "▦" },
+            ] as const).map((mode) => <button key={mode.id} type="button" onClick={() => setStartMode(mode.id)} aria-pressed={startMode === mode.id} className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-xs font-semibold transition sm:text-sm ${startMode === mode.id ? "bg-[#f2ebfb] text-[#674691] shadow-sm" : "text-[#756a77] hover:bg-[#faf7fa]"}`}><span className="text-base" aria-hidden="true">{mode.icon}</span>{mode.label}</button>)}
+          </div>
+
+          {startMode !== "ai" && <form onSubmit={handleSubmit} className="mx-auto mt-8 max-w-3xl rounded-[2rem] border border-[#e4dce2] bg-white p-5 shadow-[0_28px_70px_rgba(53,34,57,0.1)] sm:p-8">
+            {startMode === "templates" && <div className="mb-7 rounded-2xl bg-[#f4effa] px-4 py-3 text-center text-xs leading-5 text-[#6c5581]">Choose your canvas first. The template browser will open inside the editor and adapt artwork to these exact dimensions.</div>}
             <fieldset>
               <legend className="text-sm font-semibold">Choose a shape</legend>
               <div className="mt-4 grid grid-cols-3 gap-3">
@@ -229,9 +240,11 @@ export default function CreateDesignPage() {
             {error && <p id="dimension-error" role="alert" className="mt-4 rounded-xl bg-[#fff0eb] px-4 py-3 text-sm font-medium text-[#b84f37]">{error}</p>}
 
             <button type="submit" className="mt-7 flex w-full items-center justify-center gap-2 rounded-full bg-[#f57558] px-6 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(245,117,88,0.28)] transition hover:-translate-y-0.5 hover:bg-[#e8694d]">
-              Create Design <span aria-hidden="true">→</span>
+              {startMode === "templates" ? "Browse Templates" : "Create Design"} <span aria-hidden="true">→</span>
             </button>
-          </form>
+          </form>}
+
+          {startMode === "ai" && <section className="mx-auto mt-8 max-w-3xl rounded-[2rem] border border-[#e4dce2] bg-white p-7 text-center shadow-[0_28px_70px_rgba(53,34,57,0.1)] sm:p-10"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#f2ebfb] text-2xl text-[#6d489f]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-0.03em]">Create artwork with AI</h2><p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[#766b78]">Open an 8-inch round design with the AI Images panel ready. You can change the design settings first if you need another shape or size.</p><button type="button" onClick={() => router.push("/editor?shape=circle&width=8&height=8&name=AI%20Cake%20Topper&tool=ai")} className="mt-6 rounded-full bg-[#6d489f] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(109,72,159,0.24)] transition hover:bg-[#5e3d8b]">Open AI Designer →</button></section>}
         </div>
       </section>
     </main>

@@ -7,6 +7,7 @@ type EditorSearchParams = {
   width?: string | string[];
   height?: string | string[];
   name?: string | string[];
+  tool?: string | string[];
 };
 
 const validShapes: DesignShape[] = ["circle", "square", "rectangle"];
@@ -29,6 +30,8 @@ export default async function EditorPage({ searchParams }: { searchParams: Promi
   const width = requestedWidth;
   const height = shape === "rectangle" ? requestedHeight : requestedWidth;
   const name = firstValue(query.name)?.trim() || "Untitled Design";
+  const requestedTool = firstValue(query.tool);
+  const initialTool = requestedTool === "ai" ? "AI Images" as const : requestedTool === "templates" ? "Templates" as const : undefined;
 
-  return <EditorWorkspace shape={shape} width={width} height={height} name={name} fontOptions={editorFontOptions} />;
+  return <EditorWorkspace shape={shape} width={width} height={height} name={name} fontOptions={editorFontOptions} initialTool={initialTool} />;
 }
