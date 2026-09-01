@@ -121,11 +121,11 @@ export default function CreateDesignPage() {
     <main className="min-h-screen bg-[#fffdf9] text-[#281c2d]">
       <header className="border-b border-[#281c2d]/8 bg-[#fffdf9]/90 backdrop-blur-xl">
         <nav className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10" aria-label="Create design navigation">
-          <Link href="/" className="flex items-center gap-3 font-semibold tracking-[-0.02em]">
+          <Link href="/" className="flex items-center gap-3 rounded-lg font-semibold tracking-[-0.02em] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" aria-label="Cake Topper Designer home">
             <span className="grid size-9 place-items-center rounded-full bg-[#f57558] text-lg text-white shadow-[0_7px_20px_rgba(245,117,88,0.25)]">♡</span>
             <span className="text-[15px] sm:text-base">Cake Topper Designer</span>
           </Link>
-          <Link href="/" className="text-sm font-semibold text-[#766b78] transition-colors hover:text-[#281c2d]">
+          <Link href="/" className="rounded-md text-sm font-semibold text-[#766b78] transition-colors hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]">
             <span aria-hidden="true">←</span> Back to home
           </Link>
         </nav>

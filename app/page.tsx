@@ -1,32 +1,41 @@
+import Link from "next/link";
+
 const features = [
   {
     icon: "↔",
-    title: "Exact Print Sizes",
+    title: "Actual-Size Printing",
     description:
-      "Design with confidence using precise dimensions made for crisp, perfectly sized prints.",
+      "Choose exact physical dimensions, then print your topper centered on A4 at actual size.",
     tone: "bg-[#fff0e8] text-[#e46d47]",
   },
   {
     icon: "✦",
-    title: "Easy Design Editor",
+    title: "Easy Customization",
     description:
-      "Arrange text, artwork, and shapes with simple tools that keep creativity effortless.",
+      "Add text, curved lettering, images, and decorative elements in one simple editor.",
     tone: "bg-[#efe9ff] text-[#7957c8]",
   },
   {
     icon: "▦",
-    title: "Templates & Assets",
+    title: "Templates & Elements",
     description:
-      "Start faster with thoughtful layouts and a growing collection of celebration-ready assets.",
+      "Start with celebration-ready artwork and stickers sized for your chosen canvas.",
     tone: "bg-[#e8f6f0] text-[#2e8b6a]",
   },
   {
     icon: "✺",
-    title: "AI Image Generation",
+    title: "AI-Powered Artwork",
     description:
-      "Turn a simple idea into one-of-a-kind artwork created especially for your celebration.",
+      "Describe a theme and generate personalized artwork you can continue customizing.",
     tone: "bg-[#fff4d9] text-[#bd7c18]",
   },
+];
+
+const steps = [
+  { number: "01", title: "Choose Your Size", description: "Select the cake-topper shape and exact physical dimensions." },
+  { number: "02", title: "Create Your Design", description: "Generate with AI, choose a template, upload artwork, or start blank." },
+  { number: "03", title: "Personalize It", description: "Add text, images, and decorative elements in the editor." },
+  { number: "04", title: "Print or Export", description: "Download a high-resolution PNG or prepare an actual-size A4 print." },
 ];
 
 export default function Home() {
@@ -37,38 +46,31 @@ export default function Home() {
           aria-label="Main navigation"
           className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10"
         >
-          <a href="#top" className="flex items-center gap-3 font-semibold tracking-[-0.02em]">
+          <Link href="/" className="flex items-center gap-3 rounded-lg font-semibold tracking-[-0.02em] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" aria-label="Cake Topper Designer home">
             <span className="grid size-9 place-items-center rounded-full bg-[#f57558] text-lg text-white shadow-[0_7px_20px_rgba(245,117,88,0.25)]">
               ♡
             </span>
-            <span className="text-[15px] sm:text-base">Cake Topper Designer</span>
-          </a>
+            <span className="text-[15px] max-[380px]:sr-only sm:text-base">Cake Topper Designer</span>
+          </Link>
 
           <div className="hidden items-center gap-8 text-sm font-medium text-[#655b68] lg:flex">
-            <a className="transition-colors hover:text-[#281c2d]" href="#templates">
-              Templates
-            </a>
-            <a className="transition-colors hover:text-[#281c2d]" href="#ai-images">
-              AI Images
-            </a>
-            <a className="transition-colors hover:text-[#281c2d]" href="/designs">
+            <Link className="rounded-md transition-colors hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" href="/create">
+              Create
+            </Link>
+            <Link className="rounded-md transition-colors hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" href="/designs">
               My Designs
-            </a>
+            </Link>
+            <a className="rounded-md transition-colors hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" href="#how-it-works">How It Works</a>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-5">
-            <a
-              href="#sign-in"
-              className="hidden text-sm font-semibold text-[#655b68] transition-colors hover:text-[#281c2d] sm:block"
-            >
-              Sign In
-            </a>
-            <a
+            <Link href="/designs" className="grid size-10 place-items-center rounded-full text-sm font-semibold text-[#655b68] transition hover:bg-[#f4eff3] hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7957a7] lg:hidden" aria-label="My Designs"><span aria-hidden="true">◇</span></Link>
+            <Link
               href="/create"
-              className="rounded-full bg-[#2d1d31] px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#422d47] sm:px-5 sm:text-sm"
+              className="rounded-full bg-[#2d1d31] px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#422d47] active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7957a7] sm:px-5 sm:text-sm"
             >
-              Start Designing
-            </a>
+              <span className="hidden sm:inline">Create Your Topper</span><span className="sm:hidden">Create</span>
+            </Link>
           </div>
         </nav>
       </header>
@@ -84,29 +86,29 @@ export default function Home() {
               Made for magical moments
             </div>
             <h1 className="text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.055em] text-[#281c2d] sm:text-6xl lg:text-[4.5rem]">
-              Design beautiful cake toppers in minutes
+              Create personalized cake toppers with AI
             </h1>
             <p className="mt-6 max-w-lg text-pretty text-base leading-7 text-[#6d626e] sm:text-lg sm:leading-8">
-              Create print-ready cake topper designs, upload your own images, explore polished templates, or generate custom artwork with AI—all in one easy workspace.
+              Generate a design, customize it with text and artwork, then export or prepare it for actual-size printing.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
+              <Link
                 href="/create"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f57558] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(245,117,88,0.28)] transition hover:-translate-y-0.5 hover:bg-[#e8694d]"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f57558] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(245,117,88,0.28)] transition hover:-translate-y-0.5 hover:bg-[#e8694d] active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7957a7]"
               >
-                Start Designing <span aria-hidden="true">→</span>
-              </a>
+                Create Your Topper <span aria-hidden="true">→</span>
+              </Link>
               <a
-                href="#templates"
-                className="inline-flex items-center justify-center rounded-full border border-[#dcd4d9] bg-white px-6 py-3.5 text-sm font-semibold text-[#382b3b] shadow-sm transition hover:-translate-y-0.5 hover:border-[#b9acb5]"
+                href="#how-it-works"
+                className="inline-flex items-center justify-center rounded-full border border-[#dcd4d9] bg-white px-6 py-3.5 text-sm font-semibold text-[#382b3b] shadow-sm transition hover:-translate-y-0.5 hover:border-[#b9acb5] active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7957a7]"
               >
-                Explore Templates
+                See How It Works
               </a>
             </div>
             <div className="mt-9 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-[#847985]">
-              <span>✓ Print-ready exports</span>
-              <span>✓ No design skills needed</span>
-              <span>✓ Start for free</span>
+              <span>✓ Saved on your device</span>
+              <span>✓ High-resolution PNG</span>
+              <span>✓ Actual-size A4 printing</span>
             </div>
           </div>
 
@@ -173,7 +175,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="templates" className="border-y border-[#281c2d]/7 bg-white py-20 sm:py-24">
+      <section id="features" className="scroll-mt-20 border-y border-[#281c2d]/7 bg-white py-20 sm:py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#e16b50]">Made for makers</span>
@@ -191,7 +193,7 @@ export default function Home() {
                 key={feature.title}
                 className="group rounded-3xl border border-[#e9e2e6] bg-[#fffdfb] p-6 transition duration-300 hover:-translate-y-1 hover:border-[#d9cdd5] hover:shadow-[0_18px_45px_rgba(52,34,54,0.08)]"
               >
-                <span className={`grid size-11 place-items-center rounded-2xl text-lg font-semibold ${feature.tone}`}>
+                <span aria-hidden="true" className={`grid size-11 place-items-center rounded-2xl text-lg font-semibold ${feature.tone}`}>
                   {feature.icon}
                 </span>
                 <h3 className="mt-6 text-lg font-semibold tracking-[-0.02em]">{feature.title}</h3>
@@ -202,7 +204,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="start" className="bg-[#fffaf5] py-20 sm:py-28">
+      <section id="how-it-works" className="scroll-mt-20 bg-[#fffaf5] py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+          <div className="max-w-2xl">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#7957c8]">From idea to print</span>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">How It Works</h2>
+            <p className="mt-4 text-base leading-7 text-[#766b78]">Choose the right canvas first, then create and print with confidence.</p>
+          </div>
+          <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {steps.map((step) => <li key={step.number} className="rounded-3xl border border-[#e7dfe5] bg-white p-6 shadow-sm"><span className="text-xs font-bold tracking-[0.18em] text-[#d8654c]">{step.number}</span><h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">{step.title}</h3><p className="mt-3 text-sm leading-6 text-[#786e7a]">{step.description}</p></li>)}
+          </ol>
+        </div>
+      </section>
+
+      <section id="start" className="border-t border-[#281c2d]/7 bg-white py-20 sm:py-28">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <div className="text-center">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#7957c8]">Choose your creative path</span>
@@ -216,11 +231,11 @@ export default function Home() {
               <span className="grid size-12 place-items-center rounded-2xl bg-[#fff0e9] text-xl text-[#dc674d]">✎</span>
               <h3 className="mt-7 text-2xl font-semibold tracking-[-0.03em]">Manual Design</h3>
               <p className="mt-3 max-w-md text-sm leading-6 text-[#766c77] sm:text-base sm:leading-7">
-                Build your topper your way. Add text, upload photos, arrange shapes, and refine every detail on a precision canvas.
+                Build your topper your way. Add text, upload photos, arrange decorative elements, and refine every detail on a precision canvas.
               </p>
-              <a href="#top" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#cc5d45]">
-                Open a blank canvas <span aria-hidden="true">→</span>
-              </a>
+              <Link href="/create" className="mt-7 inline-flex items-center gap-2 rounded-md text-sm font-bold text-[#cc5d45] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]">
+                Create Your Topper <span aria-hidden="true">→</span>
+              </Link>
               <div className="absolute -bottom-12 -right-8 size-36 rounded-full border-[22px] border-[#fff0e9]" />
             </article>
 
@@ -230,9 +245,9 @@ export default function Home() {
               <p className="mt-3 max-w-md text-sm leading-6 text-[#d8cedb] sm:text-base sm:leading-7">
                 Describe the theme you imagine and create original artwork ready to personalize for your special occasion.
               </p>
-              <a href="#top" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#e0ccff]">
-                Imagine something new <span aria-hidden="true">→</span>
-              </a>
+              <Link href="/create" className="mt-7 inline-flex items-center gap-2 rounded-md text-sm font-bold text-[#e0ccff] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+                Try AI Designer <span aria-hidden="true">→</span>
+              </Link>
               <div className="absolute -bottom-16 -right-12 size-44 rounded-full bg-[#7657a0]/35 blur-sm" />
             </article>
           </div>
@@ -241,15 +256,15 @@ export default function Home() {
 
       <footer className="border-t border-[#281c2d]/8 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 px-5 py-8 text-center sm:flex-row sm:px-8 sm:text-left lg:px-10">
-          <a href="#top" className="flex items-center gap-2.5 text-sm font-semibold">
+          <Link href="/" className="flex items-center gap-2.5 rounded-md text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]" aria-label="Cake Topper Designer home">
             <span className="grid size-7 place-items-center rounded-full bg-[#f57558] text-xs text-white">♡</span>
             Cake Topper Designer
-          </a>
-          <p className="text-xs text-[#8a808c]">Beautiful celebrations, designed by you.</p>
+          </Link>
+          <div className="text-xs text-[#8a808c]"><p>Create personalized cake toppers with AI.</p><p className="mt-1">© {new Date().getFullYear()} Cake Topper Designer</p></div>
           <div className="flex gap-5 text-xs font-medium text-[#766b78]">
-            <a href="#templates" className="hover:text-[#281c2d]">Templates</a>
-            <a id="my-designs" href="#top" className="hover:text-[#281c2d]">My Designs</a>
-            <a id="sign-in" href="#top" className="hover:text-[#281c2d]">Sign In</a>
+            <Link href="/create" className="rounded-md hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]">Create</Link>
+            <Link href="/designs" className="rounded-md hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]">My Designs</Link>
+            <a href="#how-it-works" className="rounded-md hover:text-[#281c2d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7957a7]">How It Works</a>
           </div>
         </div>
       </footer>

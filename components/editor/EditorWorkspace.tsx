@@ -9,12 +9,14 @@ import BackgroundCropModal, { createCoverBackground } from "./BackgroundCropModa
 import AIDesignerPanel, { type AIGeneratedDesign } from "./AIDesignerPanel";
 import ElementsPanel from "./ElementsPanel";
 import TemplatesPanel from "./TemplatesPanel";
+import PrintPreviewModal from "./PrintPreviewModal";
 import useEditorHistory from "@/hooks/useEditorHistory";
 import type { DesignShape } from "@/types/design";
 import { BACKGROUND_SELECTION_ID, type BackgroundObject, type EditorObject, type ElementObject, type ImageObject, type TextObject, type UploadedImageAsset } from "@/types/editor";
 import type { EditorFontOption } from "@/lib/editor-fonts";
 import type { ElementAsset } from "@/lib/editor-elements";
 import type { TemplateDefinition } from "@/lib/editor-templates";
+import { getA4PrintLayout, type A4PrintLayout } from "@/lib/print-layout";
 import { getDesign, persistSource, restoreSource, saveDesign, type SavedDesign } from "@/lib/storage/saved-designs";
 
 const DESIGN_DPI = 300;
@@ -68,6 +70,9 @@ export default function EditorWorkspace({ shape: initialShape, width: initialWid
   const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed">("saving");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [preparingPrint, setPreparingPrint] = useState(false);
+  const [printError, setPrintError] = useState("");
+  const [printPreview, setPrintPreview] = useState<{ artworkUrl: string; layout: A4PrintLayout } | null>(null);
   const canvasRef = useRef<CakeCanvasHandle>(null);
   const clipboardRef = useRef<{ object: EditorObject; pasteCount: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -480,6 +485,44 @@ export default function EditorWorkspace({ shape: initialShape, width: initialWid
     }
   }
 
+  async function preparePrint() {
+    if (preparingPrint) return;
+    setPrintError("");
+    const layout = getA4PrintLayout(width, height);
+    if (!layout) {
+      setPrintError("This design does not fit on A4 at actual size. Choose a smaller topper size or use a larger paper size.");
+      return;
+    }
+
+    setPreparingPrint(true);
+    try {
+      let printableCanvas = canvasRef.current;
+      for (let attempt = 0; !printableCanvas && attempt < 10; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+        printableCanvas = canvasRef.current;
+      }
+      const blob = await printableCanvas?.exportPng();
+      if (!blob) throw new Error("The design canvas is not ready.");
+      const artworkUrl = URL.createObjectURL(blob);
+      objectUrlsRef.current.add(artworkUrl);
+      setPrintPreview({ artworkUrl, layout });
+    } catch {
+      setPrintError("Unable to prepare this design for printing.");
+    } finally {
+      setPreparingPrint(false);
+    }
+  }
+
+  const closePrintPreview = useCallback(() => {
+    setPrintPreview((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.artworkUrl);
+        objectUrlsRef.current.delete(current.artworkUrl);
+      }
+      return null;
+    });
+  }, []);
+
   const selectedObjectActions = (
     <div className="mt-5 grid grid-cols-2 gap-2">
       <button type="button" onClick={duplicateSelected} className="rounded-full border border-[#d8c9df] bg-[#f8f4fa] px-3 py-2.5 text-xs font-semibold text-[#674691] hover:bg-[#f1eafa]">Duplicate</button>
@@ -509,6 +552,7 @@ export default function EditorWorkspace({ shape: initialShape, width: initialWid
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className={`hidden text-[10px] font-semibold sm:inline ${saveStatus === "failed" ? "text-[#b94e38]" : "text-[#8d828f]"}`}>{saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved on this device" : "Save failed"}</span>
             <button type="button" onClick={() => void saveProject()} disabled={saveStatus === "saving"} className="rounded-full border border-[#ded6dc] px-3 py-2 text-xs font-semibold text-[#655a68] transition hover:bg-[#f7f3f7] disabled:cursor-wait disabled:opacity-55 sm:px-4">Save</button>
+            <button type="button" onClick={preparePrint} disabled={preparingPrint} className="rounded-full border border-[#bca5d8] px-3 py-2 text-xs font-semibold text-[#674691] transition hover:bg-[#f5effa] disabled:cursor-wait disabled:opacity-55 sm:px-4">{preparingPrint ? "Preparing…" : "Print"}</button>
             <button type="button" onClick={exportDesign} disabled={exporting} className="rounded-full bg-[#6d489f] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5f3d8e] disabled:cursor-wait disabled:opacity-65 sm:px-4">{exporting ? "Preparing…" : "Export"}</button>
           </div>
         </nav>
@@ -574,6 +618,7 @@ export default function EditorWorkspace({ shape: initialShape, width: initialWid
             <CakeCanvas ref={canvasRef} shape={shape} widthInches={width} heightInches={height} textObjects={textObjects} imageObjects={imageObjects} elementObjects={elementObjects} background={background} backgroundEditMode={backgroundSelected} selectedId={selectedId} onSelect={setSelectedId} onChange={updateText} onImageChange={updateImage} onElementChange={updateElement} onBackgroundChange={(updates) => commit((state) => ({ ...state, background: state.background ? { ...state.background, ...updates } : null }))} />
           </div>
           {exportError && <p role="alert" className="border-t border-[#f0cfc8] bg-[#fff6f3] px-4 py-2 text-center text-xs font-semibold text-[#a84734]">{exportError}</p>}
+          {printError && <p role="alert" className="border-t border-[#f0cfc8] bg-[#fff6f3] px-4 py-2 text-center text-xs font-semibold text-[#a84734]">{printError}</p>}
         </section>
 
         <aside className="order-3 border-t border-[#ddd6dd] bg-white p-5 lg:border-l lg:border-t-0" aria-label="Design information and properties">
@@ -640,6 +685,7 @@ export default function EditorWorkspace({ shape: initialShape, width: initialWid
       </div>
       {fontBrowserOpen && selectedText && <FontBrowser fonts={fontOptions} selectedFamily={selectedText.fontFamily} onSelect={(family) => updateText(selectedText.id, { fontFamily: family })} onClose={() => setFontBrowserOpen(false)} />}
       {cropDraft && <BackgroundCropModal background={cropDraft} designWidth={width * DESIGN_DPI} designHeight={height * DESIGN_DPI} shape={shape} onApply={applyBackground} onCancel={cancelCrop} />}
+      {printPreview && <PrintPreviewModal artworkUrl={printPreview.artworkUrl} layout={printPreview.layout} shape={shape} onClose={closePrintPreview} />}
     </main>
   );
 }
